@@ -1,0 +1,263 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zombie Shooter</title>
+  <style>
+    body { background-color: #111; color: white; margin: 0; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
+    canvas { border: 2px solid #fff; margin-bottom: 20px; }
+    .controls { display: flex; justify-content: center; gap: 10px; }
+    button { padding: 10px 20px; background-color: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:active { background-color: #555; }
+    #gameOver { display: none; color: red; font-size: 30px; text-align: center; transition: all 1s ease-in-out; }
+    #gameOver h2 { font-size: 50px; color: yellow; }
+    #gameOver .score { font-size: 40px; color: white; }
+    #gameOver .retry { font-size: 25px; color: #ff9c00; cursor: pointer; text-decoration: underline; }
+  </style>
+</head>
+<body>  <h1>Zombie Shooter</h1>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div class="controls">
+    <button id="moveLeft">Left</button>
+    <button id="moveRight">Right</button>
+    <button id="moveUp">Up</button>
+    <button id="moveDown">Down</button>
+    <button id="shoot">Shoot</button>
+  </div>
+  <div id="gameOver">
+    <h2>Game Over!</h2>
+    <div class="score">Score: <span id="finalScore"></span></div>
+    <div class="retry" onclick="restartGame()">Click to Retry</div>
+  </div>  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const player = { x: 375, y: 550, width: 50, height: 80, speed: 5, shootingSpeed: 5, armor: false };
+    const zombies = [];
+    const bullets = [];
+    const weapons = [];
+    const armors = [];
+    let score = 0;
+    let gameOver = false;
+    let zombieSpawnRate = 0.01;
+
+    let movement = { left: false, right: false, up: false, down: false };
+
+    function drawPlayer() {
+      ctx.fillStyle = player.armor ? "aqua" : "blue";
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+      ctx.fillStyle = "peachpuff";
+      ctx.beginPath();
+      ctx.arc(player.x + player.width / 2, player.y - 10, 20, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawZombies() {
+      zombies.forEach(zombie => {
+        ctx.fillStyle = zombie.color;
+        ctx.fillRect(zombie.x, zombie.y, zombie.width, zombie.height);
+        ctx.fillStyle = zombie.headColor;
+        ctx.beginPath();
+        ctx.arc(zombie.x + zombie.width / 2, zombie.y - 10, 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'red';
+        ctx.fillRect(zombie.x, zombie.y - 10, zombie.width * (zombie.hp / zombie.maxHp), 5);
+      });
+    }
+
+    function drawBullets() {
+      ctx.fillStyle = "yellow";
+      bullets.forEach(bullet => {
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+      });
+    }
+
+    function drawWeapons() {
+      weapons.forEach(weapon => {
+        ctx.fillStyle = "orange";
+        ctx.fillRect(weapon.x, weapon.y, weapon.width, weapon.height);
+      });
+    }
+
+    function drawArmors() {
+      armors.forEach(armor => {
+        ctx.fillStyle = "aqua";
+        ctx.fillRect(armor.x, armor.y, armor.width, armor.height);
+      });
+    }
+
+    function movePlayer() {
+      if (movement.left && player.x > 0) player.x -= player.speed;
+      if (movement.right && player.x < canvas.width - player.width) player.x += player.speed;
+      if (movement.up && player.y > 0) player.y -= player.speed;
+      if (movement.down && player.y < canvas.height - player.height) player.y += player.speed;
+    }
+
+    function spawnZombie() {
+      const types = [
+        { speed: 1, hp: 1, color: 'green', headColor: 'darkgreen' },
+        { speed: 2, hp: 2, color: 'darkred', headColor: 'black' },
+        { speed: 0.5, hp: 5, color: 'purple', headColor: 'indigo' },
+        { speed: 3, hp: 1, color: 'orange', headColor: 'darkorange' },
+        { speed: 0.3, hp: 8, color: 'gray', headColor: 'dimgray' }
+      ];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const x = Math.random() * (canvas.width - 40);
+      zombies.push({ x, y: -40, width: 40, height: 60, speed: type.speed, hp: type.hp, maxHp: type.hp, color: type.color, headColor: type.headColor });
+    }
+
+    function moveZombies() {
+      zombies.forEach((zombie, index) => {
+        zombie.y += zombie.speed;
+        if (zombie.y > canvas.height) zombies.splice(index, 1);
+      });
+    }
+
+    function spawnWeapon() {
+      const x = Math.random() * (canvas.width - 30);
+      weapons.push({ x, y: -40, width: 30, height: 30, speed: 1 + Math.random() * 2 });
+    }
+
+    function spawnArmor() {
+      const x = Math.random() * (canvas.width - 30);
+      armors.push({ x, y: -40, width: 30, height: 30, speed: 1 });
+    }
+
+    function moveWeapons() {
+      weapons.forEach((weapon, index) => {
+        weapon.y += weapon.speed;
+        if (weapon.y > canvas.height) weapons.splice(index, 1);
+      });
+    }
+
+    function moveArmors() {
+      armors.forEach((armor, index) => {
+        armor.y += armor.speed;
+        if (armor.y > canvas.height) armors.splice(index, 1);
+      });
+    }
+
+    function shootBullet() {
+      if (!gameOver) {
+        bullets.push({ x: player.x + player.width / 2 - 5, y: player.y, width: 10, height: 20 });
+      }
+    }
+
+    function moveBullets() {
+      bullets.forEach((bullet, index) => {
+        bullet.y -= player.shootingSpeed;
+        if (bullet.y < 0) bullets.splice(index, 1);
+      });
+    }
+
+    function checkCollisions() {
+      zombies.forEach((zombie, zIndex) => {
+        bullets.forEach((bullet, bIndex) => {
+          if (bullet.x < zombie.x + zombie.width && bullet.x + bullet.width > zombie.x && bullet.y < zombie.y + zombie.height && bullet.y + bullet.height > zombie.y) {
+            bullets.splice(bIndex, 1);
+            zombie.hp--;
+            if (zombie.hp <= 0) {
+              zombies.splice(zIndex, 1);
+              score++;
+            }
+          }
+        });
+
+        if (player.x < zombie.x + zombie.width && player.x + player.width > zombie.x && player.y < zombie.y + zombie.height && player.y + player.height > zombie.y) {
+          if (player.armor) {
+            player.armor = false;
+            zombies.splice(zIndex, 1);
+          } else {
+            gameOver = true;
+          }
+        }
+      });
+
+      weapons.forEach((weapon, index) => {
+        if (player.x < weapon.x + weapon.width && player.x + player.width > weapon.x && player.y < weapon.y + weapon.height && player.y + player.height > weapon.y) {
+          weapons.splice(index, 1);
+          player.shootingSpeed = 10;
+        }
+      });
+
+      armors.forEach((armor, index) => {
+        if (player.x < armor.x + armor.width && player.x + player.width > armor.x && player.y < armor.y + armor.height && player.y + player.height > armor.y) {
+          armors.splice(index, 1);
+          player.armor = true;
+        }
+      });
+    }
+
+    function drawScore() {
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 10, 30);
+    }
+
+    function showGameOver() {
+      const finalScore = document.getElementById("finalScore");
+      finalScore.textContent = score;
+      document.getElementById("gameOver").style.display = "block";
+    }
+
+    function restartGame() {
+      gameOver = false;
+      score = 0;
+      zombies.length = 0;
+      bullets.length = 0;
+      weapons.length = 0;
+      armors.length = 0;
+      player.x = 375;
+      player.y = 550;
+      player.shootingSpeed = 5;
+      player.armor = false;
+      zombieSpawnRate = 0.01;
+      document.getElementById("gameOver").style.display = "none";
+      update();
+    }
+
+    function update() {
+      if (gameOver) {
+        showGameOver();
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      movePlayer();
+      moveZombies();
+      moveBullets();
+      moveWeapons();
+      moveArmors();
+      drawPlayer();
+      drawZombies();
+      drawBullets();
+      drawWeapons();
+      drawArmors();
+      drawScore();
+
+      if (Math.random() < zombieSpawnRate) spawnZombie();
+      if (Math.random() < 0.003) spawnWeapon();
+      if (Math.random() < 0.0015) spawnArmor();
+
+      zombieSpawnRate += 0.00001; // gradually increase spawn rate
+
+      checkCollisions();
+      requestAnimationFrame(update);
+    }
+
+    update();
+
+    document.getElementById("moveLeft").addEventListener("touchstart", () => movement.left = true);
+    document.getElementById("moveRight").addEventListener("touchstart", () => movement.right = true);
+    document.getElementById("moveUp").addEventListener("touchstart", () => movement.up = true);
+    document.getElementById("moveDown").addEventListener("touchstart", () => movement.down = true);
+
+    document.getElementById("moveLeft").addEventListener("touchend", () => movement.left = false);
+    document.getElementById("moveRight").addEventListener("touchend", () => movement.right = false);
+    document.getElementById("moveUp").addEventListener("touchend", () => movement.up = false);
+    document.getElementById("moveDown").addEventListener("touchend", () => movement.down = false);
+
+    document.getElementById("shoot").addEventListener("click", shootBullet);
+  </script></body>
+</html>
